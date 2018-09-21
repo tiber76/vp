@@ -20,6 +20,7 @@ namespace VP_Test_WebApp.Controllers
             this._authService = authService;
         }
 
+        // Test dans le projet => Vp_Test_WebApp.XunitTests, sinon utiliser les urls ci-dessous => 
         // true example : https://localhost:44397/api/authenticate/lebair.jeremy@gmail.com/ilovevp 
         // false example : https://localhost:44397/api/authenticate/toto/ilovevp
         [HttpGet("/api/authenticate/{email}/{password}")]
@@ -32,7 +33,7 @@ namespace VP_Test_WebApp.Controllers
             {
                 isAuthenticate = _authService.IsAuthenticate(email, password);
             }
-            catch (Exception)
+            catch
             {
                 return StatusCode(500, "Une erreur est survenue durant l'authentification via Login et Password.");
             }
@@ -40,19 +41,18 @@ namespace VP_Test_WebApp.Controllers
             return Ok(isAuthenticate);
         }
 
-        // true example :  
-        // false example : 
-        [HttpGet("/api/confidentials/{email}")]
+        // Test dans le projet => Vp_Test_WebApp.ConfidentialTest
         [Authorize]
+        [HttpGet("/api/confidentials/{email}")]
         public ActionResult<bool> Confidentials(string email)
         {
             bool isConfidentials = false;
 
             try
             {
-                isConfidentials = true;
+                isConfidentials = _authService.IsConfidential(email);
             }
-            catch (Exception)
+            catch
             {
                 return StatusCode(500, "Une erreur est survenue durant l'authentification securise.");
             }

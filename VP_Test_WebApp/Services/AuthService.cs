@@ -12,15 +12,32 @@ namespace Services
 
             try
             {
-                if (login.Equals(AuthModel.email) && password.Equals(AuthModel.password)) isAuthenticate = true;
+                if (login.Equals(AuthModel.Email) && password.Equals(AuthModel.Password)) isAuthenticate = true;
             }
             catch(Exception ex)
             {
-                //log
+                //todo Ajouter des log ( fichier ou Cloud ) via ex
                 throw (ex);
             }
 
             return isAuthenticate;
+        }
+
+        public bool IsConfidential(string email)
+        {
+            bool isConfidential = false;
+
+            try
+            {
+                if(email.Equals(AuthModel.Email)) isConfidential = true;
+            }
+            catch (Exception ex)
+            {
+                //todo Ajouter des log ( fichier ou Cloud ) via ex
+                throw (ex);
+            }
+
+            return isConfidential;
         }
     }
 }

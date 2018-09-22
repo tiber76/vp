@@ -82,7 +82,7 @@ namespace VP_Test_WebApp.Authentification
                     return AuthenticateResult.Fail("Les signatures ne correspondent pas.");
                 }
             }
-            catch(Exception ex)
+            catch
             {
                 return AuthenticateResult.Fail("L'en-tete Authozisation n'est pas valide.");
             }

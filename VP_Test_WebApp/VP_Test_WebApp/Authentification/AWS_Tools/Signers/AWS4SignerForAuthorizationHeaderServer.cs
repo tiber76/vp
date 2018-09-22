@@ -1,17 +1,17 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Vp_Test_WebApp.ConfidentialTest.AWS_Tools.Signers
+namespace VP_Test_WebApp.Authentification.AWS_Tools.Signers
 {
     /// <summary>
     /// Sample AWS4 signer demonstrating how to sign requests to Amazon S3
     /// using an 'Authorization' header.
     /// </summary>
-    public class AWS4SignerForAuthorizationHeader : AWS4SignerBase
+    public class AWS4SignerForAuthorizationHeaderServer : AWS4SignerBaseServer
     {
         /// <summary>
         /// Computes an AWS4 signature for a request, ready for inclusion as an 
@@ -38,31 +38,16 @@ namespace Vp_Test_WebApp.ConfidentialTest.AWS_Tools.Signers
         /// The computed authorization string for the request. This value needs to be set as the 
         /// header 'Authorization' on the subsequent HTTP request.
         /// </returns>
-        public string ComputeSignature(IDictionary<string, string> headers,
+        public string ComputeSignature(IHeaderDictionary headers,
+                                       string dateTimeStamp,
+                                       string dateStamp,
+                                       Uri endpointUri,
+                                       string httpMethod,
                                        string queryParameters,
-                                       string bodyHash,
-                                       string awsAccessKey,
-                                       string awsSecretKey)
+                                       string awsSecretKey,
+                                       string canonicalizedHeaderNames)
         {
-            // first get the date and time for the subsequent request, and convert to ISO 8601 format
-            // for use in signature generation
-            var requestDateTime = DateTime.UtcNow;
-            var dateTimeStamp = requestDateTime.ToString(ISO8601BasicFormat, CultureInfo.InvariantCulture);
-
-            // update the headers with required 'x-amz-date' and 'host' values
-            headers.Add(X_Amz_Date, dateTimeStamp);
-
-            var hostHeader = EndpointUri.Host;
-            if (!EndpointUri.IsDefaultPort)
-                hostHeader += ":" + EndpointUri.Port;
-            headers.Add("Host", hostHeader);
-                        
-            // canonicalize the headers; we need the set of header names as well as the
-            // names and values to go into the signature process
-            var canonicalizedHeaderNames = CanonicalizeHeaderNames(headers);
-            Console.WriteLine("\nCanonicalHN:\n{0}", canonicalizedHeaderNames);
-            var canonicalizedHeaders = CanonicalizeHeaders(headers);
-            Console.WriteLine("\nCanonicalH:\n{0}", canonicalizedHeaders);
+            var canonicalizedHeaders = CanonicalizeHeaders(headers, canonicalizedHeaderNames);
 
             // if any query string parameters have been supplied, canonicalize them
             // (note this sample assumes any required url encoding has been done already)
@@ -88,13 +73,13 @@ namespace Vp_Test_WebApp.ConfidentialTest.AWS_Tools.Signers
             }
             
             // canonicalize the various components of the request
-            var canonicalRequest = CanonicalizeRequest(EndpointUri,
-                                                       HttpMethod,
+            var canonicalRequest = CanonicalizeRequest(endpointUri,
+                                                       httpMethod,
                                                        canonicalizedQueryParameters,
                                                        canonicalizedHeaderNames,
                                                        canonicalizedHeaders,
-                                                       bodyHash);
-            Console.WriteLine("\nCanonicalRequest:\n{0}", canonicalRequest);
+                                                       EMPTY_BODY_SHA256);
+
 
             // generate a hash of the canonical request, to go into signature computation
             var canonicalRequestHashBytes
@@ -103,7 +88,7 @@ namespace Vp_Test_WebApp.ConfidentialTest.AWS_Tools.Signers
             // construct the string to be signed
             var stringToSign = new StringBuilder();
 
-            var dateStamp = requestDateTime.ToString(DateStringFormat, CultureInfo.InvariantCulture);
+            //var dateStamp = requestDateTime.ToString(DateStringFormat, CultureInfo.InvariantCulture);
             var scope = string.Format("{0}/{1}/{2}/{3}", 
                                       dateStamp, 
                                       Region, 
@@ -113,8 +98,6 @@ namespace Vp_Test_WebApp.ConfidentialTest.AWS_Tools.Signers
             stringToSign.AppendFormat("{0}-{1}\n{2}\n{3}\n", SCHEME, ALGORITHM, dateTimeStamp, scope);
             stringToSign.Append(ToHexString(canonicalRequestHashBytes, true));
 
-            Console.WriteLine("\nStringToSign:\n{0}", stringToSign);
-
             // compute the signing key
             var kha = KeyedHashAlgorithm.Create(HMACSHA256);
             kha.Key = DeriveSigningKey(HMACSHA256, awsSecretKey, Region, dateStamp, Service);
@@ -122,18 +105,8 @@ namespace Vp_Test_WebApp.ConfidentialTest.AWS_Tools.Signers
             // compute the AWS4 signature and return it
             var signature = kha.ComputeHash(Encoding.UTF8.GetBytes(stringToSign.ToString()));
             var signatureString = ToHexString(signature, true);
-            Console.WriteLine("\nSignature:\n{0}", signatureString);
 
-            var authString = new StringBuilder();
-            authString.AppendFormat("{0}-{1} ", SCHEME, ALGORITHM);
-            authString.AppendFormat("Credential={0}/{1}, ", awsAccessKey, scope);
-            authString.AppendFormat("SignedHeaders={0}, ", canonicalizedHeaderNames);
-            authString.AppendFormat("Signature={0}", signatureString);
-
-            var authorization = authString.ToString();
-            Console.WriteLine("\nAuthorization:\n{0}", authorization);
-
-            return authorization;
+            return signatureString;
         }
     }
 }

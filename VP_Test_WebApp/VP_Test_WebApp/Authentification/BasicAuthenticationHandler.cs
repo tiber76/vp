@@ -1,13 +1,13 @@
 ﻿using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
-using System.Net.Http.Headers;
+using System.Globalization;
+using System.Linq;
 using System.Security.Claims;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
+using VP_Test_WebApp.Authentification.AWS_Tools.Signers;
 using VP_Test_WebApp.Settings;
 
 namespace VP_Test_WebApp.Authentification
@@ -27,57 +27,65 @@ namespace VP_Test_WebApp.Authentification
             this._appSettings = appSettings.Value;
         }
 
-
-        // var authString = new StringBuilder();
-        // authString.AppendFormat("{0}-{1} ", SCHEME, ALGORITHM);
-        // authString.AppendFormat("Credential={0}/{1}, ", awsAccessKey, scope);
-        // authString.AppendFormat("SignedHeaders={0}, ", canonicalizedHeaderNames);
-        // authString.AppendFormat("Signature={0}", signatureString);
-        // Exemple
-        // "SCHEME=AWS4, 
-        // ALGO=HMAC-SHA256, 
-        // Credential=123/20180921/us-west-2/s3/aws4_request, 
-        // SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date, 
-        // Signature=62895a6e71b22d5ef1d0010bfdf713ea11bee30ebe157169802c35d4b2c37dc3"
-
         protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            //if (!Request.Headers.ContainsKey("Authorization"))
-            //    return AuthenticateResult.Fail("L'en-tete Authozisation est introuvable.");
+            if (!Request.Headers.ContainsKey("Authorization"))
+                return AuthenticateResult.Fail("L'en-tete Authozisation est introuvable.");
 
             try
             {
                 // récupération du Authorization Header et ses élements
-                //var authHeader = AuthenticationHeaderValue.Parse(Request.Headers["Authorization"]);
-                //var credentialBytes = Convert.FromBase64String(authHeader.Parameter);
-                //var credentials = Encoding.UTF8.GetString(credentialBytes).Split(',');
-                var credentialBytes = "SCHEME = AWS4, ALGO = HMAC - SHA256, Credential = 123 / 20180921 / us - west - 2 / s3 / aws4_request, SignedHeaders = content - type; host; x - amz - content - sha256; x - amz - date, Signature = fa4422fdd6cec37f69da4e827792348c700e99f21ded80a0756c8739857f7657";
-                var credentials = credentialBytes.Replace(" ", "").Split(',');
-
-                var awsKey = credentials[2].Split('/')[0];
-
-                if(!awsKey.Equals(_appSettings.AwsKey))
-                    return AuthenticateResult.Fail("La clé de sécurité est incorrecte.");
+                var credentials = Request.Headers["Authorization"].ToString().Replace(" ", "").Split(',');
+                var awsKey = credentials[0].Split('=')[1].Split('/')[0];
+                var canonicalizedHeaderNames = credentials[1].Split('=')[1];
+                var signatureStringtoSign = credentials[2].Split('=')[1];
 
                 // Vérification de l'existance de la clé d'authorisation
+                if (!awsKey.Equals(_appSettings.AwsKey))
+                    return AuthenticateResult.Fail("La clé de sécurité est incorrecte.");
 
+                // Récupération de la date utilisé par le client
+                var requestDateTime = DateTime.ParseExact(Request.Headers.FirstOrDefault(a => a.Key.Equals("X-Amz-Date")).Value.FirstOrDefault(), "yyyyMMddTHHmmssZ", CultureInfo.InvariantCulture);
+                var dateTimeStamp = Request.Headers.FirstOrDefault(a => a.Key.Equals("X-Amz-Date")).Value.FirstOrDefault();
+                var dateStamp = requestDateTime.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                // Création de l'uri via les éléments de la request
+                Uri requestUri = new Uri($"{Request.Scheme}://{Request.Host}{Request.Path}");
 
-                // Récupération de la valeur du secret
+                // Appel à la classe de création de la signature
+                AWS4SignerForAuthorizationHeaderServer aWS4SignerForAuthorizationHeader = new AWS4SignerForAuthorizationHeaderServer()
+                {
+                    EndpointUri = requestUri,
+                    HttpMethod = "GET",
+                    Service = "",
+                    Region = ""
+                };
 
-                // Création de la signature à partir de ces élements
+                var stringToSign = aWS4SignerForAuthorizationHeader.ComputeSignature(Request.Headers,
+                    dateTimeStamp,
+                    dateStamp,
+                    requestUri,
+                    Request.Method,
+                    Request.QueryString.Value,
+                    _appSettings.AwsValue,
+                    canonicalizedHeaderNames);
 
                 // Match des signatures
-
+                if (stringToSign.Equals(signatureStringtoSign))
+                {
+                    var identity = new ClaimsIdentity(null, Scheme.Name);
+                    var principal = new ClaimsPrincipal(identity);
+                    var ticket = new AuthenticationTicket(principal, Scheme.Name);
+                    return AuthenticateResult.Success(ticket);
+                }
+                else
+                {
+                    return AuthenticateResult.Fail("Les signatures ne correspondent pas.");
+                }
             }
-            catch
+            catch(Exception ex)
             {
                 return AuthenticateResult.Fail("L'en-tete Authozisation n'est pas valide.");
             }
-
-            var identity = new ClaimsIdentity(null, Scheme.Name);
-            var principal = new ClaimsPrincipal(identity);
-            var ticket = new AuthenticationTicket(principal, Scheme.Name);
-            return AuthenticateResult.Success(ticket);
-        }
+        }  
     }
 }

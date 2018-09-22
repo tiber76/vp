@@ -12,11 +12,11 @@ namespace Vp_Test_WebApp.ConfidentialTest
         /// Request the content of an object from the specified bucket using virtual hosted-style 
         /// object addressing.
         /// </summary>
-        public static void Run(string email, string objectKey, string awsAccessKey, string awsSecretKey)
+        public static void Run(string objectKey, string email, string awsAccessKey, string awsSecretKey)
         {
             Console.WriteLine("GetConfidential");
 
-            var endpointUri = $"http://localhost:44397/{objectKey}/{email}";
+            var endpointUri = $"https://localhost:44397/{objectKey}/{email}";
 
             var uri = new Uri(endpointUri);
 
